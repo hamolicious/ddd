@@ -44,6 +44,7 @@ interface Live {
   readonly spec: SearchSpec;
   readonly onSpecChange: (spec: SearchSpec) => void;
   readonly code: string;
+  readonly editor: EditorDeps;
 }
 
 interface LiveStore {
@@ -71,7 +72,7 @@ function liveStore(initial: Live): LiveStore {
 }
 
 export const EDITOR_STYLES =
-  "search-step-editor search:flex search:flex-col search:gap-2 search:p-1 search:font-sans search:text-text search:[&_button]:tap-h search:[&_button]:cursor-pointer search:[&_button]:rounded search:[&_button]:border search:[&_button]:border-border search:[&_button]:bg-bg-subtle search:[&_button]:px-2 search:[&_button]:text-inherit search:[&_.search-checkbox]:tap-h search:[&_.search-checkbox]:inline-flex search:[&_.search-checkbox]:cursor-pointer search:[&_.search-checkbox]:items-center search:[&_.search-checkbox]:gap-1 search:[&_.search-checkbox]:whitespace-nowrap search:[&_.search-clause]:flex search:[&_.search-clause]:flex-wrap search:[&_.search-clause]:items-end search:[&_.search-clause]:gap-1.5 search:[&_.search-clause]:rounded search:[&_.search-clause]:border search:[&_.search-clause]:border-transparent search:[&_.search-clause]:p-1 search:[&_.search-clause-invalid]:border-warning search:[&_.search-field]:flex search:[&_.search-field]:flex-col search:[&_.search-field]:gap-0.5 search:[&_.search-field]:text-sm search:[&_.search-field]:text-text-muted search:[&_.search-field_input]:tap-h search:[&_.search-field_input]:rounded search:[&_.search-field_input]:border search:[&_.search-field_input]:border-border search:[&_.search-field_input]:bg-bg search:[&_.search-field_input]:px-2 search:[&_.search-field_input]:text-base search:[&_.search-field_input]:text-text search:[&_.search-field_select]:tap-h search:[&_.search-field_select]:rounded search:[&_.search-field_select]:border search:[&_.search-field_select]:border-border search:[&_.search-field_select]:bg-bg search:[&_.search-field_select]:px-2 search:[&_.search-field_select]:text-base search:[&_.search-field_select]:text-text search:[&_.search-grow]:flex-[1_1_12rem] search:[&_.search-row]:flex search:[&_.search-row]:flex-wrap search:[&_.search-row]:items-end search:[&_.search-row]:gap-2 search:[&_.search-clauses]:m-0 search:[&_.search-clauses]:flex search:[&_.search-clauses]:list-none search:[&_.search-clauses]:flex-col search:[&_.search-clauses]:gap-2 search:[&_.search-clauses]:p-0 search:[&_.search-clause-note]:m-0 search:[&_.search-clause-note]:flex-[1_1_100%] search:[&_.search-clause-note]:text-sm search:[&_.search-clause-note]:text-warning search:[&_.search-icon-button]:min-w-[var(--ddd-tap-target)] search:[&_.search-flags]:flex search:[&_.search-flags]:flex-[1_1_100%] search:[&_.search-flags]:flex-wrap search:[&_.search-flags]:items-center search:[&_.search-flags]:gap-3 search:[&_.search-note-results]:flex search:[&_.search-note-results]:flex-wrap search:[&_.search-note-results]:gap-1";
+  "search-step-editor search:flex search:flex-col search:gap-2 search:p-1 search:font-sans search:text-text search:[&_button]:tap-h search:[&_button]:cursor-pointer search:[&_button]:rounded search:[&_button]:border search:[&_button]:border-border search:[&_button]:bg-bg-subtle search:[&_button]:px-2 search:[&_button]:text-inherit search:[&_.search-checkbox]:tap-h search:[&_.search-checkbox]:inline-flex search:[&_.search-checkbox]:cursor-pointer search:[&_.search-checkbox]:items-center search:[&_.search-checkbox]:gap-1 search:[&_.search-checkbox]:whitespace-nowrap search:[&_.search-clause]:flex search:[&_.search-clause]:flex-col search:[&_.search-clause]:items-stretch search:[&_.search-clause]:gap-1.5 search:[&_.search-clause]:rounded search:[&_.search-clause]:border search:[&_.search-clause]:border-transparent search:[&_.search-clause]:p-1 search:[&_.search-clause-invalid]:border-warning search:[&_.search-field]:flex search:[&_.search-field]:flex-col search:[&_.search-field]:gap-0.5 search:[&_.search-field]:text-sm search:[&_.search-field]:text-text-muted search:[&_.search-field_input]:w-full search:[&_.search-field_input]:tap-h search:[&_.search-field_input]:rounded search:[&_.search-field_input]:border search:[&_.search-field_input]:border-border search:[&_.search-field_input]:bg-bg search:[&_.search-field_input]:px-2 search:[&_.search-field_input]:text-base search:[&_.search-field_input]:text-text search:[&_.search-field_select]:w-full search:[&_.search-field_select]:tap-h search:[&_.search-field_select]:rounded search:[&_.search-field_select]:border search:[&_.search-field_select]:border-border search:[&_.search-field_select]:bg-bg search:[&_.search-field_select]:px-2 search:[&_.search-field_select]:text-base search:[&_.search-field_select]:text-text search:[&_.search-grow]:flex-[1_1_12rem] search:[&_.search-row]:flex search:[&_.search-row]:flex-wrap search:[&_.search-row]:items-end search:[&_.search-row]:gap-2 search:[&_.search-clauses]:m-0 search:[&_.search-clauses]:flex search:[&_.search-clauses]:list-none search:[&_.search-clauses]:flex-col search:[&_.search-clauses]:gap-2 search:[&_.search-clauses]:p-0 search:[&_.search-clause-note]:m-0 search:[&_.search-clause-note]:flex-[1_1_100%] search:[&_.search-clause-note]:text-sm search:[&_.search-clause-note]:text-warning search:[&_.search-icon-button]:min-w-[var(--ddd-tap-target)] search:[&_.search-clause>.search-icon-button]:self-end search:[&_.search-clause>.search-op-icon]:hidden search:[&_.search-clause>.search-grow]:flex-none search:[&_.search-flags]:flex search:[&_.search-flags]:flex-[1_1_100%] search:[&_.search-flags]:flex-wrap search:[&_.search-flags]:items-center search:[&_.search-flags]:gap-3 search:[&_.search-note-results]:flex search:[&_.search-note-results]:flex-wrap search:[&_.search-note-results]:gap-1";
 
 const KEEP_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
 
@@ -87,18 +88,8 @@ function withFilter(spec: SearchSpec, filter: FilterDraft): SearchSpec {
   return { ...spec, filter };
 }
 
-function WhereEditor({
-  store,
-  id,
-  editor,
-  close,
-}: {
-  readonly store: LiveStore;
-  readonly id: string;
-  readonly editor: EditorDeps;
-  readonly close: () => void;
-}): ReactElement {
-  const { spec, onSpecChange } = useLive(store);
+function WhereEditor({ store, id, close }: { readonly store: LiveStore; readonly id: string; readonly close: () => void }): ReactElement {
+  const { spec, onSpecChange, editor } = useLive(store);
   const filter = filterOf(spec);
   const any = id === ANY_STEP;
   const step = any ? { combine: filter.combine, clauses: filter.clauses } : stepConditions(filter, id);
@@ -317,8 +308,8 @@ export function ChainBar({
   onCopyCode,
   onCopyPlan,
 }: ChainBarProps): ReactElement {
-  const [store] = useState(() => liveStore({ spec, onSpecChange, code }));
-  useLayoutEffect(() => store.set({ spec, onSpecChange, code }), [store, spec, onSpecChange, code]);
+  const [store] = useState(() => liveStore({ spec, onSpecChange, code, editor }));
+  useLayoutEffect(() => store.set({ spec, onSpecChange, code, editor }), [store, spec, onSpecChange, code, editor]);
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [viewOpen, setViewOpen] = useState(false);
@@ -374,7 +365,7 @@ export function ChainBar({
       anchor,
       onClose: () => setEditing(undefined),
       render: (close) =>
-        id === "from" ? <FromEditor store={store} close={close} /> : <WhereEditor store={store} id={id} editor={editor} close={close} />,
+        id === "from" ? <FromEditor store={store} close={close} /> : <WhereEditor store={store} id={id} close={close} />,
     });
   };
 

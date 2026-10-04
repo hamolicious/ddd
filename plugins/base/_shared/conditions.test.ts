@@ -187,6 +187,8 @@ describe("the folder tree", () => {
       in: { field: "id", values: [{ str: "a" }, { str: "b" }] },
     });
     expect(describeClause(clause({ op: "child_of", value: "root", deep: true }))).toBe("is anywhere inside root");
+    expect(describeClause(clause({ field: "fm.status", op: "eq", value: "open", negate: true }))).toBe("fm.status is not open");
+    expect(describeClause(clause({ field: "fm.tags", op: "contains_any", value: "a, b", negate: true }))).toBe("fm.tags list contains none of a, b");
   });
 
   it("watches the named notes, or every note with children once one is deep", () => {

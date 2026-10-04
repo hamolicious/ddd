@@ -391,11 +391,98 @@ export interface SearchExecutor {
   watch(plan: SearchPlanJson, options?: SearchWatchOptions): Promise<SearchWatch<unknown, SearchResultOptions>>;
 }
 
+export type SearchValueKind = "text" | "reference" | "number" | "boolean" | "date" | "null";
+
+export interface SearchFieldInfo {
+  readonly field: string;
+  readonly kinds: readonly SearchValueKind[];
+  readonly list: boolean;
+  readonly builtIn: boolean;
+  readonly documents?: number;
+}
+
+export interface SearchFieldsOptions {
+  readonly includeMachine?: boolean;
+}
+
+export interface SearchFieldsWatch {
+  readonly fields: readonly SearchFieldInfo[];
+  onChange(listener: (fields: readonly SearchFieldInfo[]) => void): () => void;
+  close(): void;
+}
+
 export interface SearchApi {
   from(): SearchFrom<"documents">;
   from<S extends SearchSourceName>(source: S): SearchFrom<S>;
   fromPlan(plan: SearchPlanJson): AnySearchBuilder;
   fromAny(source?: SearchSourceName): AnySearchBuilder;
+  fields(options?: SearchFieldsOptions): Promise<readonly SearchFieldInfo[]>;
+  watchFields(options?: SearchFieldsOptions): Promise<SearchFieldsWatch>;
+}
+
+export const SEARCH_BUILT_IN_FIELDS: readonly SearchFieldInfo[] = [
+  { field: "id", kinds: ["text"], list: false, builtIn: true },
+  { field: "title", kinds: ["text"], list: false, builtIn: true },
+  { field: "content", kinds: ["text"], list: false, builtIn: true },
+  { field: "created_at", kinds: ["date"], list: false, builtIn: true },
+  { field: "created_by", kinds: ["text", "null"], list: false, builtIn: true },
+  { field: "updated_at", kinds: ["date"], list: false, builtIn: true },
+  { field: "updated_by", kinds: ["text", "null"], list: false, builtIn: true },
+  { field: "words", kinds: ["number"], list: false, builtIn: true },
+  { field: "characters", kinds: ["number"], list: false, builtIn: true },
+];
+
+const FM_KINDS: Readonly<Record<string, SearchValueKind>> = {
+  string: "text",
+  number: "number",
+  boolean: "boolean",
+  date: "date",
+  null: "null",
+};
+
+type FieldRow = Readonly<Record<string, unknown>>;
+
+function numbersByKey(rows: readonly FieldRow[], column: string): ReadonlyMap<string, number> {
+  const out = new Map<string, number>();
+  for (const row of rows) {
+    const value = row[column];
+    if (typeof row.key === "string" && typeof value === "number") out.set(row.key, value);
+  }
+  return out;
+}
+
+export function searchFieldsOf(
+  kinds: readonly FieldRow[],
+  counts: readonly FieldRow[],
+  references: readonly FieldRow[] = [],
+  texts: readonly FieldRow[] = [],
+): readonly SearchFieldInfo[] {
+  const documents = numbersByKey(counts, "documents");
+  const linked = numbersByKey(references, "references");
+  const textCounts = numbersByKey(texts, "texts");
+  const frontmatter = kinds.flatMap((row): SearchFieldInfo[] => {
+    if (typeof row.key !== "string" || row.key === "") return [];
+    const seen = Array.isArray(row.kinds) ? row.kinds : [];
+    const found = [...new Set(seen.map((kind) => FM_KINDS[String(kind)]).filter((kind): kind is SearchValueKind => kind !== undefined))];
+    const links = linked.get(row.key) ?? 0;
+    const mapped =
+      links === 0
+        ? found
+        : links >= (textCounts.get(row.key) ?? 0)
+          ? found.map((kind) => (kind === "text" ? "reference" : kind))
+          : [...found, "reference" as const];
+    const count = documents.get(row.key);
+    return [
+      {
+        field: `fm.${row.key}`,
+        kinds: mapped,
+        list: row.list !== null && row.list !== undefined,
+        builtIn: false,
+        ...(count === undefined ? {} : { documents: count }),
+      },
+    ];
+  });
+  return [...SEARCH_BUILT_IN_FIELDS, ...frontmatter];
 }
 
 type Stage = unknown;
@@ -615,6 +702,50 @@ class Builder {
   }
 }
 
+function fieldPlans(executor: SearchExecutor, options: SearchFieldsOptions = {}): readonly AnySearchBuilder[] {
+  const from = (source: SearchSourceName): AnySearchBuilder => {
+    const rows = new Builder(executor, source, []) as unknown as AnySearchBuilder;
+    return options.includeMachine === true ? rows : rows.where((w) => w.not(w("doc.fm.machine", "eq", true)));
+  };
+  return [
+    from("fm").groupBy("key").collect("kind", "kinds").max("position", "list").sort("key"),
+    from("fm").distinct("key", "doc.id").groupBy("key").count("documents"),
+    from("links").where("kind", "eq", "frontmatter").groupBy("key").sum("count", "references"),
+    from("fm").where("kind", "eq", "string").groupBy("key").count("texts"),
+  ];
+}
+
+async function watchFields(executor: SearchExecutor, options?: SearchFieldsOptions): Promise<SearchFieldsWatch> {
+  const watches = await Promise.all(fieldPlans(executor, options).map((plan) => plan.watch()));
+  const listeners = new Set<(fields: readonly SearchFieldInfo[]) => void>();
+  const rows = watches.map((watch) => watch.result.rows);
+  const combine = (): readonly SearchFieldInfo[] => searchFieldsOf(rows[0] ?? [], rows[1] ?? [], rows[2] ?? [], rows[3] ?? []);
+  let fields = combine();
+  const offs = watches.map((watch, index) =>
+    watch.onChange((result) => {
+      rows[index] = result.rows;
+      fields = combine();
+      for (const listener of [...listeners]) listener(fields);
+    }),
+  );
+  return {
+    get fields() {
+      return fields;
+    },
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    close: () => {
+      for (const off of offs) off();
+      for (const watch of watches) watch.close();
+      listeners.clear();
+    },
+  };
+}
+
 export function createSearchApi(executor: SearchExecutor): SearchApi {
   return {
     from: ((source: SearchSourceName = "documents") =>
@@ -622,5 +753,10 @@ export function createSearchApi(executor: SearchExecutor): SearchApi {
     fromPlan: (plan) =>
       new Builder(executor, plan.source ?? "documents", plan.stages ?? []) as unknown as AnySearchBuilder,
     fromAny: (source = "documents") => new Builder(executor, source, []) as unknown as AnySearchBuilder,
+    fields: async (options) => {
+      const [kinds, counts, references, texts] = await Promise.all(fieldPlans(executor, options).map((plan) => plan.run()));
+      return searchFieldsOf(kinds?.rows ?? [], counts?.rows ?? [], references?.rows ?? [], texts?.rows ?? []);
+    },
+    watchFields: (options) => watchFields(executor, options),
   };
 }

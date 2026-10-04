@@ -28,6 +28,8 @@ export {
 
 export {
   createSearchApi,
+  SEARCH_BUILT_IN_FIELDS,
+  searchFieldsOf,
   type AnySearchBuilder,
   type AnySearchRow,
   type SearchAggregateState,
@@ -48,6 +50,10 @@ export {
   type SearchFmColumns,
   type SearchFrom,
   type SearchFuzzyOptions,
+  type SearchFieldInfo,
+  type SearchFieldsOptions,
+  type SearchFieldsWatch,
+  type SearchValueKind,
   type SearchGroupStart,
   type SearchHitInfo,
   type SearchLinkColumns,

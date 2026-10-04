@@ -8,6 +8,7 @@ import type { FmKeySelectProps, FmValueSelectProps, NoteSelectProps, SearchField
 
 import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
 import { documentsNoteSource } from "../../_shared/note-picker.js";
+import { useSearchSuggestions } from "../../_shared/search-fields.js";
 import { Spinner } from "../../_shared/Spinner.js";
 
 import { ChainBar } from "./ChainBar.js";
@@ -71,7 +72,8 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
       () => (index !== undefined ? indexNoteSource(index) : documentsNoteSource(kernel.search)),
       [index],
     );
-    const suggestions = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
+    const indexed = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
+    const suggestions = useSearchSuggestions(kernel.search, indexed);
     const noteTitle = (id: string): string => notes.notes().find((note) => note.id === id)?.title || "a note";
     const code = specCode(shownSpec, sort);
     const copy = (label: string, text: string): void => {
@@ -101,7 +103,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
       ? []
       : [{ field: sort.field, label: sort.field.replace(/^fm\./, ""), kind: "str", sortable: true }];
 
-    const fields: readonly SearchField[] = (suggestions?.fields() ?? []).map((option) => ({
+    const fields: readonly SearchField[] = suggestions.fields().map((option) => ({
       field: option.field,
       label: option.label,
       ...(option.kind !== undefined ? { kind: option.kind } : {}),
@@ -145,7 +147,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
               NoteSelect: deps.NoteSelect,
               FmKeySelect: deps.FmKeySelect,
               FmValueSelect: deps.FmValueSelect,
-              ...(suggestions !== undefined ? { suggestions } : {}),
+              suggestions,
             }}
             noteTitle={noteTitle}
             {...(searchInput ? { searchInput } : {})}

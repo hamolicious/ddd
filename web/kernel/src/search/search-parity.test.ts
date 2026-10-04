@@ -5,7 +5,7 @@ import { feedRow } from "../store/testing.js";
 import type { CoreBindings } from "../wasm/index.js";
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
 import { ProjectionHost } from "./backend.js";
-import { SearchPlanError } from "@kernel";
+import { SearchPlanError, createSearchApi, type SearchResult } from "@kernel";
 import { reviveSearchError } from "./revive.js";
 import { serializeSearchError } from "./errors.js";
 
@@ -61,6 +61,22 @@ describe.skipIf(!coreArtifactExists())("search plans in the Wasm build agree wit
       if (testCase.rows) expect(result.rows, testCase.name).toEqual(testCase.rows);
       expect(result.total, testCase.name).toBe(testCase.total);
     }
+  });
+
+  it("knows every field's kinds, whether it is a list, and how many notes use it", async () => {
+    const search = createSearchApi({
+      run: async (plan) => (await host.run(plan)) as unknown as SearchResult<unknown>,
+      watch: () => Promise.reject(new Error("unused")),
+    });
+    const fields = await search.fields();
+    const field = (name: string) => fields.find((entry) => entry.field === name);
+    expect(field("updated_at")).toEqual({ field: "updated_at", kinds: ["date"], list: false, builtIn: true });
+    expect(field("fm.status")).toEqual({ field: "fm.status", kinds: ["text"], list: false, builtIn: false, documents: 3 });
+    expect(field("fm.priority")).toMatchObject({ kinds: ["number"], documents: 3 });
+    expect(field("fm.due")).toMatchObject({ kinds: ["date"], list: false });
+    expect(field("fm.flag")).toMatchObject({ kinds: ["boolean"] });
+    expect(field("fm.note")).toMatchObject({ kinds: ["null"] });
+    expect(field("fm.tags")).toMatchObject({ kinds: ["text"], list: true, documents: 2 });
   });
 
   it("rejects the corpus errors with a typed plan error", async () => {

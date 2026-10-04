@@ -1,4 +1,4 @@
-export const MANIFEST_KERNEL_VERSION = "4.1.0";
+export const MANIFEST_KERNEL_VERSION = "4.2.0";
 
 export interface PluginFrontend {
   readonly module: string;

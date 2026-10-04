@@ -112,6 +112,7 @@ export interface FieldOption {
   readonly field: string;
   readonly label: string;
   readonly kind?: ValueKind;
+  readonly kinds?: readonly ValueKind[];
   readonly sortable: boolean;
   readonly list?: boolean;
 }
@@ -339,9 +340,30 @@ export function describeClause(clause: FilterClause): string {
     child_of: clause.deep === true ? "is anywhere inside" : "is inside",
     parent_of: "contains note",
   };
-  const head = TREE_OPS.includes(clause.op) ? labels[clause.op] : `${clause.field} ${labels[clause.op]}`;
+  const negated: Readonly<Record<ClauseOp, string>> = {
+    eq: "is not",
+    ne: "is",
+    lt: "is not before/less than",
+    lte: "is more than",
+    gt: "is not after/greater than",
+    gte: "is less than",
+    contains: "list does not contain",
+    any: "no item is",
+    every: "not every item is",
+    text_contains: "does not contain",
+    text_starts_with: "does not start with",
+    text_ends_with: "does not end with",
+    missing: "is not missing",
+    exists: "does not exist",
+    is_null: "is not null",
+    contains_any: "list contains none of",
+    child_of: clause.deep === true ? "is nowhere inside" : "is not inside",
+    parent_of: "does not contain note",
+  };
+  const verb = clause.negate === true ? negated[clause.op] : labels[clause.op];
+  const head = TREE_OPS.includes(clause.op) ? verb : `${clause.field} ${verb}`;
   const tail = VALUELESS_OPS.includes(clause.op) ? "" : ` ${clause.value}`;
-  return `${clause.negate === true ? "not " : ""}${head}${tail}`;
+  return `${head}${tail}`;
 }
 
 export interface Suggestions {

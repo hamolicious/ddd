@@ -532,6 +532,11 @@ const { rows } = await kernel.search
   words are in `result.hits`.
 - **Paging.** `limit`, `offset`, or `cursor(result.nextCursor)`; `withTotal()` adds an exact
   `total`.
+- **Fields.** `fields()` lists every field notes use, built-in and frontmatter, with the
+  kinds of value seen (`text`, `reference` for note links, `number`, `boolean`, `date`,
+  `null`), whether it holds a list, and how many notes use it. `watchFields()` keeps the list
+  live. Keys only machine documents use are left out unless you pass
+  `{ includeMachine: true }`.
 - **Live results.** `watch()` instead of `run()` gives `{ result, onChange, window, close }`.
   It re-runs only when something it reads changes, at most once per frame. `window(start,
   count)` moves it over a long list for virtual scrolling, and `watch({ window: { start,

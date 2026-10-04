@@ -158,6 +158,39 @@ describe.skipIf(!coreArtifactExists())("kernel.search", () => {
     expect(watch.result.total).toBe(3);
   });
 
+  it("watches the fields notes use, and leaves out machine-only keys", async () => {
+    const { store, search } = await setup([
+      feedRow({ id: "A", seq: 1, content: "---\nstatus: open\n---\n# Alpha\n" }),
+      feedRow({ id: "M", seq: 2, content: "---\nmachine: true\ncache: 3\n---\n# Cache\n" }),
+    ]);
+    const watch = await search.watchFields();
+    const frontmatter = () => watch.fields.filter((field) => !field.builtIn).map((field) => field.field);
+    expect(frontmatter()).toEqual(["fm.status"]);
+    let changes = 0;
+    watch.onChange(() => {
+      changes += 1;
+    });
+    await store.putLocal([{ ...feedRow({ id: "B", seq: 0, content: "---\ndue: 2026-11-01\n---\n# Beta\n" }), materialized_version: "local" }]);
+    await frame();
+    await frame();
+    expect(changes).toBeGreaterThan(0);
+    expect(frontmatter()).toEqual(["fm.due", "fm.status"]);
+    expect(watch.fields.find((field) => field.field === "fm.due")?.kinds).toEqual(["date"]);
+    expect((await search.fields({ includeMachine: true })).map((field) => field.field)).toContain("fm.cache");
+    watch.close();
+  });
+
+  it("tells a key holding note links from one holding text", async () => {
+    const { search } = await setup([
+      feedRow({ id: "A", seq: 1, content: "# Alpha\n" }),
+      feedRow({ id: "B", seq: 2, content: "---\nparent: doc://A\nmixed: doc://A\n---\n# Beta\n" }),
+      feedRow({ id: "C", seq: 3, content: "---\nmixed: plain words\n---\n# Gamma\n" }),
+    ]);
+    const fields = await search.fields();
+    expect(fields.find((field) => field.field === "fm.parent")?.kinds).toEqual(["reference"]);
+    expect(fields.find((field) => field.field === "fm.mixed")?.kinds).toEqual(["text", "reference"]);
+  });
+
   it("a watch can start on a window without reading the whole result first", async () => {
     const rows = Array.from({ length: 20 }, (_, index) =>
       feedRow({ id: `D${String(index).padStart(2, "0")}`, seq: index + 1, content: `# Doc ${index}\n` }),

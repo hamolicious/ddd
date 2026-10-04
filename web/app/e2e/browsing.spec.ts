@@ -259,3 +259,44 @@ test("opening a document straight into the editor leaves focus alone", async ({ 
   await expect(page.locator(".cm-content")).toBeVisible();
   await expect(page.locator(".cm-content")).not.toBeFocused();
 });
+
+test("a condition asks for a value type only when the notes do not settle it", async ({ page, request, baseURL }) => {
+  const base = baseURL as string;
+  await createDocument(request, base, "---\ntitle: Typed probe one\nduesettled: 2026-11-01\nwhenmixed: soon\n---\n\nbody\n");
+  await createDocument(request, base, "---\ntitle: Typed probe two\nduesettled: 2026-12-01\nwhenmixed: 2026-12-24\n---\n\nbody\n");
+
+  await signIn(page);
+  await waitSynced(page);
+  await page.goto("/#/?advanced=1");
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Condition/ }).click();
+  const editor = page.locator(".search-step-editor");
+  const property = editor.getByRole("combobox", { name: "Property" });
+
+  await property.fill("duesettled");
+  await expect(editor.getByRole("combobox", { name: "Value type" })).toHaveCount(0);
+
+  const comparison = editor.getByRole("combobox", { name: "Comparison" });
+  await expect(comparison.locator("option:checked")).toHaveText("is");
+  await editor.getByRole("button", { name: "Negate this condition" }).click();
+  await expect(editor.getByRole("button", { name: "Negated: turn off" })).toHaveAttribute("aria-pressed", "true");
+  await expect(comparison.locator("option:checked")).toHaveText("is not");
+  await expect(page.getByRole("button", { name: /^where fm\.duesettled is not/ })).toBeVisible();
+  await editor.getByRole("button", { name: "Negated: turn off" }).click();
+  await expect(comparison.locator("option:checked")).toHaveText("is");
+
+  await property.fill("whenmixed");
+  const type = editor.getByRole("combobox", { name: "Value type" });
+  await expect(type).toBeVisible();
+  await expect(type.locator("option")).toHaveText(["text", "date"]);
+
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Where" })).toHaveCount(0, { timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Inside a note/ }).click();
+  await expect(editor.getByRole("button", { name: "Include nested notes" })).toHaveCount(0);
+  await editor.getByRole("button", { name: "Including nested notes: turn off" }).click();
+  await expect(editor.getByRole("button", { name: "Include nested notes" })).toHaveAttribute("aria-pressed", "false");
+});
