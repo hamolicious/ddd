@@ -33,6 +33,12 @@ export interface CoreQueryEngine {
 
 export type SqlParam = string | number | null;
 
+export interface SqlFunctionInfo {
+  readonly name: string;
+  readonly arity: number;
+  readonly deterministic: boolean;
+}
+
 export interface SqlStatement {
   readonly sql: string;
   readonly params: readonly SqlParam[];
@@ -118,6 +124,8 @@ export interface CoreBindings {
     candidates: readonly { readonly title: string; readonly content: string }[],
   ): { readonly hits: readonly SearchRanked[]; readonly total: number };
   searchExpand(plan: unknown, vocabulary: readonly string[]): unknown;
+  searchFunctions(): readonly SqlFunctionInfo[];
+  searchCall(index: number, args: readonly SqlParam[]): SqlParam;
 }
 
 export function filterRow(row: ProjectionRow): FilterRow {
@@ -176,6 +184,8 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
         },
       searchExpand: (plan: unknown, vocabulary: readonly string[]) =>
         JSON.parse(mod.search_expand(JSON.stringify(plan), JSON.stringify(vocabulary))) as unknown,
+      searchFunctions: () => JSON.parse(mod.search_functions()) as readonly SqlFunctionInfo[],
+      searchCall: (index: number, args: readonly SqlParam[]) => mod.search_call(index, [...args]) as SqlParam,
     } satisfies CoreBindings;
   })();
   return cached;

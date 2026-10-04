@@ -28,6 +28,8 @@ declare module "@ddd/core-wasm" {
   export function search_fuzzy(request_json: string): string;
 
   export function search_expand(plan_json: string, vocabulary_json: string): string;
+  export function search_functions(): string;
+  export function search_call(index: number, args: unknown[]): unknown;
 
   export class QueryEngine {
     constructor();

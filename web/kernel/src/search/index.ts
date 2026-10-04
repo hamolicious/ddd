@@ -9,6 +9,7 @@ export {
   type SearchDatabase,
   type SqlRow,
 } from "./database.js";
+export { coreSqlFunctions, type SqlFunction } from "./functions.js";
 export { PROJECTION_CHUNK, ProjectionFeed, type ProjectionProgress, type ProjectionRole } from "./feed.js";
 export { SearchHost } from "./host.js";
 export { SEARCH_CHANNEL, SEARCH_LOCK, browserPeers, type PeerMessage, type PeerOp, type SearchPeers } from "./peers.js";

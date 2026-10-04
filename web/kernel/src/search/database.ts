@@ -2,6 +2,8 @@ import type { Database, PreparedStatement, SAHPoolUtil, Sqlite3Static } from "@s
 
 import type { SqlParam, SqlStatement } from "../wasm/index.js";
 
+import { sameName, type SqlFunction } from "./functions.js";
+
 export const SEARCH_OPFS_DIRECTORY = "ddd-search";
 export const SEARCH_DB_FILE = "/search.sqlite3";
 
@@ -12,6 +14,7 @@ export interface SearchDatabase {
   select(sql: string, params?: readonly SqlParam[]): SqlRow[];
   run(statements: readonly SqlStatement[]): void;
   exec(sql: string): void;
+  register(functions: readonly SqlFunction[]): void;
   reset(): Promise<void>;
   wipe(): Promise<void>;
   close(): void;
@@ -54,12 +57,6 @@ export function markSearchWipePending(): void {
   remember(true);
 }
 
-export const FOLD_FUNCTION = "ddd_fold";
-
-export function fold(text: string): string {
-  return text.toLowerCase();
-}
-
 let sqlite: Promise<Sqlite3Static> | undefined;
 
 function loadSqlite(): Promise<Sqlite3Static> {
@@ -69,6 +66,7 @@ function loadSqlite(): Promise<Sqlite3Static> {
 
 export interface OpenOptions {
   readonly persistent?: boolean;
+  readonly functions?: readonly SqlFunction[];
 }
 
 export async function openSearchDatabase(options: OpenOptions = {}): Promise<SearchDatabase> {
@@ -77,19 +75,22 @@ export async function openSearchDatabase(options: OpenOptions = {}): Promise<Sea
     const pool = await sqlite3
       .installOpfsSAHPoolVfs({ name: "ddd-search", directory: SEARCH_OPFS_DIRECTORY })
       .catch(() => undefined);
-    if (pool) return new SqliteDatabase(sqlite3, pool);
+    if (pool) return new SqliteDatabase(sqlite3, pool, options.functions ?? []);
   }
-  return new SqliteDatabase(sqlite3, undefined);
+  return new SqliteDatabase(sqlite3, undefined, options.functions ?? []);
 }
 
 class SqliteDatabase implements SearchDatabase {
   #db: Database;
   readonly #cache = new Map<string, PreparedStatement>();
+  #functions: readonly SqlFunction[];
 
   constructor(
     private readonly sqlite3: Sqlite3Static,
     private readonly pool: SAHPoolUtil | undefined,
+    functions: readonly SqlFunction[],
   ) {
+    this.#functions = functions;
     this.#db = this.#open();
   }
 
@@ -128,6 +129,13 @@ class SqliteDatabase implements SearchDatabase {
     this.#db.exec(sql);
   }
 
+  register(functions: readonly SqlFunction[]): void {
+    const taken = functions.find((added) => this.#functions.some((known) => sameName(known.name, added.name)));
+    if (taken) throw new Error(`a SQL function named ${taken.name} is already registered`);
+    this.#functions = [...this.#functions, ...functions];
+    for (const fn of functions) this.#define(this.#db, fn);
+  }
+
   async reset(): Promise<void> {
     this.#closeDb();
     if (this.pool) this.pool.unlink(SEARCH_DB_FILE);
@@ -146,10 +154,15 @@ class SqliteDatabase implements SearchDatabase {
 
   #open(): Database {
     const db = this.pool ? new this.pool.OpfsSAHPoolDb(SEARCH_DB_FILE) : new this.sqlite3.oo1.DB(":memory:", "c");
-    db.createFunction(FOLD_FUNCTION, (_context: unknown, value: unknown) => (typeof value === "string" ? fold(value) : value) as never, {
-      deterministic: true,
-    });
+    for (const fn of this.#functions) this.#define(db, fn);
     return db;
+  }
+
+  #define(db: Database, fn: SqlFunction): void {
+    db.createFunction(fn.name, (_context: unknown, ...args: unknown[]) => fn.call(args as SqlParam[]) as never, {
+      arity: fn.arity,
+      deterministic: fn.deterministic,
+    });
   }
 
   #prepare(sql: string): PreparedStatement {

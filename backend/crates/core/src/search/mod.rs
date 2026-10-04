@@ -2,6 +2,7 @@ mod catalog;
 mod compile;
 mod cursor;
 mod extract;
+mod functions;
 mod fuzzy;
 mod plan;
 mod project;
@@ -15,6 +16,9 @@ pub use cursor::{decode_cursor, encode_cursor};
 pub use extract::{
     AttachmentRef, BodyFacts, FmEntry, FmKind, LinkKind, MAX_FM_DEPTH, Reference, Task, TaskState,
     doc_id_of, extract_body, flatten_paths, fm_entries,
+};
+pub use functions::{
+    SQL_FUNCTIONS, SqlCall, SqlFunction, SqlFunctionInfo, call_sql_function, sql_function,
 };
 pub use fuzzy::{
     FuzzyCandidate, FuzzySpec, Ranked, RankedPage, rank as fuzzy_rank, rank_page as fuzzy_rank_page,

@@ -1,6 +1,7 @@
 import type { ProjectionRow } from "../protocol.js";
 import { loadCore, type CoreBindings } from "../wasm/index.js";
 import { openSearchDatabase, type SqlRow } from "./database.js";
+import { coreSqlFunctions } from "./functions.js";
 import {
   NOTHING,
   SearchProjection,
@@ -96,7 +97,10 @@ export class ProjectionHost implements ProjectionBackend {
     if (this.#wiped) return Promise.reject(new Error("the search database was deleted at sign-out"));
     this.#projection ??= (async () => {
       const core = this.options.core ?? (await loadCore());
-      const db = await openSearchDatabase({ persistent: this.#persistent ?? this.options.persistent ?? true });
+      const db = await openSearchDatabase({
+        persistent: this.#persistent ?? this.options.persistent ?? true,
+        functions: coreSqlFunctions(core),
+      });
       const projection = new SearchProjection(core, db);
       await projection.open();
       return projection;

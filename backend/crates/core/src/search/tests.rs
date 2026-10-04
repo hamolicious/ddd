@@ -4,15 +4,7 @@ use super::*;
 
 pub(crate) fn open() -> Connection {
     let connection = Connection::open_in_memory().unwrap();
-    connection
-        .create_scalar_function(
-            FOLD_FUNCTION,
-            1,
-            rusqlite::functions::FunctionFlags::SQLITE_UTF8
-                | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
-            |context| Ok(context.get::<Option<String>>(0)?.map(|text| fold(&text))),
-        )
-        .unwrap();
+    register_functions(&connection);
     for sql in SCHEMA {
         connection.execute(sql, []).unwrap();
     }
@@ -20,6 +12,34 @@ pub(crate) fn open() -> Connection {
         .execute(WRITE_SCHEMA_VERSION, [SEARCH_SCHEMA_VERSION.to_string()])
         .unwrap();
     connection
+}
+
+pub(crate) fn register_functions(connection: &Connection) {
+    use rusqlite::functions::FunctionFlags;
+    use rusqlite::types::ValueRef;
+    for function in SQL_FUNCTIONS {
+        let flags = if function.deterministic {
+            FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC
+        } else {
+            FunctionFlags::SQLITE_UTF8
+        };
+        let call = function.call;
+        connection
+            .create_scalar_function(function.name, function.arity, flags, move |context| {
+                let args: Vec<SqlValue> = (0..context.len())
+                    .map(|index| match context.get_raw(index) {
+                        ValueRef::Null | ValueRef::Blob(_) => SqlValue::Null,
+                        ValueRef::Integer(i) => SqlValue::Int(i),
+                        ValueRef::Real(f) => SqlValue::Real(f),
+                        ValueRef::Text(t) => {
+                            SqlValue::Text(String::from_utf8_lossy(t).into_owned())
+                        }
+                    })
+                    .collect();
+                Ok(bind(&call(&args)))
+            })
+            .unwrap();
+    }
 }
 
 fn bind(value: &SqlValue) -> Sql {

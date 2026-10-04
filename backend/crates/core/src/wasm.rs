@@ -213,6 +213,43 @@ pub fn search_expand(plan_json: &str, vocabulary_json: &str) -> String {
 }
 
 #[wasm_bindgen]
+pub fn search_functions() -> String {
+    let infos: Vec<search::SqlFunctionInfo> = search::SQL_FUNCTIONS
+        .iter()
+        .map(search::SqlFunction::info)
+        .collect();
+    serde_json::to_string(&infos).unwrap_or_else(|_| "[]".into())
+}
+
+const SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+
+fn sql_value_of(value: &wasm_bindgen::JsValue) -> search::SqlValue {
+    if let Some(text) = value.as_string() {
+        return search::SqlValue::Text(text);
+    }
+    match value.as_f64() {
+        Some(n) if n.fract() == 0.0 && n.abs() <= SAFE_INTEGER => search::SqlValue::Int(n as i64),
+        Some(n) => search::SqlValue::Real(n),
+        None => search::SqlValue::Null,
+    }
+}
+
+fn js_value_of(value: search::SqlValue) -> wasm_bindgen::JsValue {
+    match value {
+        search::SqlValue::Null => wasm_bindgen::JsValue::NULL,
+        search::SqlValue::Int(i) => wasm_bindgen::JsValue::from_f64(i as f64),
+        search::SqlValue::Real(f) => wasm_bindgen::JsValue::from_f64(f),
+        search::SqlValue::Text(text) => wasm_bindgen::JsValue::from_str(&text),
+    }
+}
+
+#[wasm_bindgen]
+pub fn search_call(index: u32, args: Vec<wasm_bindgen::JsValue>) -> wasm_bindgen::JsValue {
+    let args: Vec<search::SqlValue> = args.iter().map(sql_value_of).collect();
+    js_value_of(search::call_sql_function(index as usize, &args))
+}
+
+#[wasm_bindgen]
 pub fn search_encode_cursor(values_json: &str) -> String {
     let values: Vec<serde_json::Value> = serde_json::from_str(values_json).unwrap_or_default();
     let values: Vec<search::SqlValue> = values

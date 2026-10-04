@@ -68,6 +68,8 @@ function unavailableCore(reason: string): CoreBindings {
     searchSnippets: fail,
     searchFuzzy: fail,
     searchExpand: fail,
+    searchFunctions: fail,
+    searchCall: fail,
     semanticsVersion: () => -1,
   };
 }
