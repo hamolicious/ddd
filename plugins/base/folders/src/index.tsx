@@ -603,7 +603,7 @@ export default function activate(kernel: Kernel): void {
       <div className="folders:flex folders:flex-col folders:gap-6">
         <DefaultLocation
           label="New notes go to"
-          hint="A new note is filed inside this one. “New note inside” on a note in the tree still files it there."
+          hint="A new note is filed inside this one. New › Note on a note in the tree still files it there."
           notes={notes}
           {...(search ? { NoteSelect: search.NoteSelect } : {})}
           value={locationFor("note")}
@@ -882,8 +882,8 @@ export default function activate(kernel: Kernel): void {
         const here = inTree(target);
         const parent = hierarchy.parentOf.get(id) ?? "";
         return [
-          { id: "new-note", label: "New note inside", run: () => docs.newDocument({ parent: id }) },
-          ...(search ? [{ id: "new-search", label: "New search inside", run: () => newSearch(id) }] : []),
+          { id: "new-note", label: "Note", group: "new", run: () => docs.newDocument({ parent: id }) },
+          ...(search ? [{ id: "new-search", label: "Search", group: "new", run: () => newSearch(id) }] : []),
           ...(here && hierarchy.childrenOf.has(id)
             ? [
                 { id: "expand-all", label: "Expand all inside", run: () => request({ kind: "fold", id, expanded: true }) },
@@ -902,7 +902,7 @@ export default function activate(kernel: Kernel): void {
           },
           {
             id: "move",
-            label: "Move to…",
+            label: "Move to folder…",
             hint: parent === "" ? "Now at the root" : `Now in ${hierarchy.notes.get(parent)?.title ?? "Untitled"}`,
             run: () => (here ? request({ kind: "move", target: noteTarget(id) }) : moveMany([id])),
           },
@@ -932,11 +932,11 @@ export default function activate(kernel: Kernel): void {
       id: "folders.root",
       target: "folders/root",
       items: (): MenuItem[] => [
-        { id: "new-note-root", label: "New note at the root", run: () => docs.newDocument({ parent: "" }) },
+        { id: "new-note-root", label: "Note", group: "new", run: () => docs.newDocument({ parent: "" }) },
         ...(copied !== undefined
           ? [{ id: "paste-root", label: "Paste at the root", hint: copied.title, run: () => void paste("").catch(failed("paste it")) }]
           : []),
-        ...(search ? [{ id: "new-search-root", label: "New search at the root", run: () => newSearch("") }] : []),
+        ...(search ? [{ id: "new-search-root", label: "Search", group: "new", run: () => newSearch("") }] : []),
         { id: "expand-all", label: "Expand all", run: () => request({ kind: "fold", id: "", expanded: true }) },
         { id: "collapse-all", label: "Collapse all", run: () => request({ kind: "fold", id: "", expanded: false }) },
       ],

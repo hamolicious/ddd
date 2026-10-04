@@ -40,7 +40,7 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `kanban` | a saved search as a board (`type: kanban`): columns from a field (`fm.status` by default). Dragging a card or "Move to" sets the field, records when it entered the column (`<field>-since`), and its rank in the card's `%%% kanban` section (or follows the search's sort). Cards show their title, any property, or the rendered body (ticking a task writes to the note). Filter bar, optional swimlanes (`lanes`), a **+** per column and lane. "New board" makes one note that is a saved search of its own children | — |
 | `calendar` | a saved search as a month calendar (`type: calendar`), dated by a chosen field, optionally to an end field; "New calendar" | — |
 | `timeline` | a saved search on a time axis (`type: timeline`): start and optional end fields, optional lanes, days/weeks/months; "New timeline" | — |
-| `folders` | drag-and-drop tree of notes (see [The folder tree](#the-folder-tree)); context actions New note inside, New search inside, Duplicate, Copy, Paste inside, Rename, Move to…, Delete; Duplicate / Copy / Paste note as commands (copies the note without its children; the clipboard is in-app) | `addDecoration`, `file`, `fileNew`, `parentOf`, `childrenOf`, `look`… |
+| `folders` | drag-and-drop tree of notes (see [The folder tree](#the-folder-tree)); context actions New › Note and New › Search (inside the note, or at the root), Duplicate, Copy, Paste inside, Rename, Move to folder…, Delete; Duplicate / Copy / Paste note as commands (copies the note without its children; the clipboard is in-app) | `addDecoration`, `file`, `fileNew`, `parentOf`, `childrenOf`, `look`… |
 | `folder-style` | a background colour and icon for any note in the tree ("Color and icon…"), text colour by contrast; defaults and rules in Settings; a note's own look always wins; per user | — |
 | `local-folder` | mirrors every note as a Markdown file in a folder on this device (`kernel.capabilities.folder`), both ways, while the app runs; asks once in the desktop shell, offered in Settings in Chromium browsers | — |
 | `auto-fm` | adds the frontmatter properties listed in Settings to notes you create (or also edit) on this device, only where the key is missing; can be limited by conditions; values may use `{{date}}`, `{{time}}`, `{{now}}`; per user, client-side, works offline | — |
@@ -89,7 +89,7 @@ type: [kanban, calendar]  # several: a tab each, opens in the first
 | `calendar` | `calendar` | `%%% calendar` |
 | `timeline` | `timeline` | `%%% timeline` |
 
-- Create one from the palette ("New board", "New table", …) or the folder tree ("New board inside", "… at the root"). It starts as a search for the notes inside it.
+- Create one from the palette ("New board", "New table", …) or the folder tree's menu (New › View › Board, on a note or on the root). It starts as a search for the notes inside it.
 - View settings (the View panel, or on the board itself) save immediately. The search itself changes only on "Update saved search".
 - A view plugin is a `document-surface` mode that answers to its type and renders inside `search`'s `SavedSearch` (`_shared/saved-view-mode.tsx`).
 

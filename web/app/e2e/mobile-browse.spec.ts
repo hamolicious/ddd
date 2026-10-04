@@ -362,6 +362,17 @@ test.describe("the same phone, rotated and at the Android floor", () => {
     const action = page.getByRole("dialog").getByRole("menuitem", { name: "Rename" });
     await expect(action).toBeVisible();
     await tappable(action, "a folder row action in landscape");
+    const menu = page.getByRole("dialog");
+    await menu.getByRole("menuitem", { name: "New" }).click();
+    await expect(action).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "View" }).click();
+    await expect(menu.getByRole("menuitem", { name: "Board" })).toBeVisible();
+    await tappable(menu.getByRole("menuitem", { name: "Board" }), "an item in a nested menu");
+    await menu.getByRole("button", { name: "Back to New" }).click();
+    await expect(menu.getByRole("menuitem", { name: "Note" })).toBeVisible();
+    await menu.getByRole("button", { name: /^Back to / }).click();
+    await expect(action).toBeVisible();
+    await noHorizontalScroll(page, "a nested folder menu in landscape");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
 

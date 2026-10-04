@@ -42,7 +42,8 @@ function moveItems(board: BoardHandle, rows: readonly DocumentRow[]): MenuItem[]
     .filter((column) => movable.some((row) => !column.cards.some((card) => card.id === row.id)) && movable.every((row) => board.reaches(row, column)))
     .map((column, index) => ({
       id: `move-${index}`,
-      label: `Move to ${board.titleOf(column)}`,
+      label: board.titleOf(column),
+      group: "move",
       ...(count > 1 ? { hint: `${count} cards` } : {}),
       run: () => board.move(movable, column, column.cards.length),
     }));

@@ -270,7 +270,9 @@ test("a note is renamed inline, and a new note made inside it is listed there", 
   await expect.poll(async () => await rawText(request, base, id), { timeout: 20_000 }).toContain(`title: ${renamed}`);
   expect(await rawText(request, base, id)).toBe(fixture(name).replace(`title: ${name}`, `title: ${renamed}`));
 
-  await (await actions(page, renamed)).getByRole("menuitem", { name: /^New note inside/ }).click();
+  const menu = await actions(page, renamed);
+  await menu.getByRole("menuitem", { name: "New" }).click();
+  await menu.getByRole("menu", { name: "New" }).getByRole("menuitem", { name: "Note" }).click();
   await expect(page).toHaveURL(/#\/doc\//);
   const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   expect(created).not.toBe(id);
@@ -282,7 +284,46 @@ test("a note is renamed inline, and a new note made inside it is listed there", 
   await expect(row(page, renamed)).toBeVisible();
 });
 
-test("New search inside files a saved search under the note and opens it", async ({ page, request, baseURL }) => {
+test("the note menu nests New › View, and the keyboard walks in and out of it", async ({ page, request, baseURL }) => {
+  const name = unique("nested");
+  await createDocument(request, baseURL as string, fixture(name));
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await openTree(page);
+  await expect(row(page, name)).toBeVisible();
+
+  const menu = await actions(page, name);
+  const opener = menu.getByRole("menuitem", { name: "New" });
+  await expect(menu.getByRole("menuitem", { name: /inside/ })).toHaveCount(0);
+  await opener.click();
+  const created = menu.getByRole("menu", { name: "New" });
+  await expect(created.getByRole("menuitem", { name: "Note" })).toBeFocused();
+  await expect(created.getByRole("menuitem", { name: "Search" })).toBeVisible();
+
+  const views = created.getByRole("menuitem", { name: "View" });
+  await views.focus();
+  await page.keyboard.press("ArrowRight");
+  const viewMenu = menu.getByRole("menu", { name: "View" });
+  for (const label of ["Table", "Board", "Timeline", "Calendar"]) {
+    await expect(viewMenu.getByRole("menuitem", { name: label })).toBeVisible();
+  }
+  await expect(viewMenu.getByRole("menuitem").first()).toBeFocused();
+  const within = await viewMenu.boundingBox();
+  expect(within?.x ?? 0).toBeGreaterThan((await created.boundingBox())?.x ?? 0);
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(viewMenu).toHaveCount(0);
+  await expect(views).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(created).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});
+
+test("New › Search files a saved search under the note and opens it", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
   const name = unique("searches");
   const id = await createDocument(request, base, fixture(name));
@@ -292,7 +333,9 @@ test("New search inside files a saved search under the note and opens it", async
   await openTree(page);
   await expect(row(page, name)).toBeVisible();
 
-  await (await actions(page, name)).getByRole("menuitem", { name: /^New search inside/ }).click();
+  const menu = await actions(page, name);
+  await menu.getByRole("menuitem", { name: "New" }).click();
+  await menu.getByRole("menu", { name: "New" }).getByRole("menuitem", { name: "Search" }).click();
   await expect(page).toHaveURL(/#\/doc\//);
   const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   expect(created).not.toBe(id);
@@ -495,7 +538,7 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
     await expect(menu).toBeVisible();
     return menu;
   };
-  await (await sheet()).getByRole("menuitem", { name: "Move to…" }).click();
+  await (await sheet()).getByRole("menuitem", { name: /^Move to folder…/ }).click();
   const picker = page.getByRole("dialog");
   await picker.getByRole("textbox", { name: "Filter notes" }).fill(toTitle);
   await picker.getByRole("button", { name: toTitle }).first().click();
@@ -561,7 +604,7 @@ test("a note moved back and forth lands every move, by drag and by menu", async 
     await drag(page, row(page, title), row(page, toTitle));
   };
   const byMenu = async (toTitle: string): Promise<void> => {
-    await (await actions(page, title)).getByRole("menuitem", { name: "Move to…" }).click();
+    await (await actions(page, title)).getByRole("menuitem", { name: /^Move to folder…/ }).click();
     const picker = page.getByRole("dialog");
     await picker.getByRole("textbox", { name: "Filter notes" }).fill(toTitle);
     await picker.getByRole("button", { name: toTitle }).first().click();

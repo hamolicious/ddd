@@ -155,7 +155,12 @@ export interface SavedViewAction {
   readonly id: string;
   readonly target: string;
   readonly order: number;
-  readonly items: (target: { readonly id: string }) => readonly { readonly id: string; readonly label: string; run(): void }[];
+  readonly items: (target: { readonly id: string }) => readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly group?: string;
+    run(): void;
+  }[];
 }
 
 export interface SavedViewHosts {
@@ -173,6 +178,7 @@ export function offerSavedView(kernel: Kernel, plugin: SavedViewPlugin, hosts: S
   hosts.addMode(savedViewMode({ ...plugin, kernel, search }));
 
   const title = `New ${plugin.noun}`;
+  const viewLabel = `${plugin.noun.charAt(0).toUpperCase()}${plugin.noun.slice(1)}`;
   const make = async (parent?: string): Promise<void> => {
     const searches = search();
     if (!searches) throw new Error(`a ${plugin.noun} needs the Search plugin`);
@@ -215,14 +221,14 @@ export function offerSavedView(kernel: Kernel, plugin: SavedViewPlugin, hosts: S
       target: "ddd/document",
       order: 20,
       items: (target: { readonly id: string }) => [
-        { id: "new", label: `${title} inside`, run: () => void make(target.id).catch(failed) },
+        { id: "new", label: viewLabel, group: "new.view", run: () => void make(target.id).catch(failed) },
       ],
     },
     {
       id: `${kernel.pluginId}.new-at-root`,
       target: "folders/root",
       order: 20,
-      items: () => [{ id: "new", label: `${title} at the root`, run: () => void make("").catch(failed) }],
+      items: () => [{ id: "new", label: viewLabel, group: "new.view", run: () => void make("").catch(failed) }],
     },
   ];
   for (const action of actions) hosts.addAction(action);
